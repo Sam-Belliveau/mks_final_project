@@ -15,3 +15,4 @@ This project will use:
 * Signals
 * Pipes (named and unnamed)
 
+It should look like the shell we created before, but everything that gets typed on one window, should then appear on the other window.
