@@ -33,7 +33,7 @@ struct shell_command* shell_readline()
     int home_dir_len = strlen(home_dir);
 
     // copy cwd and hostname into buffers
-    if(getcwd(cwd, SH_CWD_SIZE));
+    getcwd(cwd, SH_CWD_SIZE);
     gethostname(usr, SH_USR_SIZE);
 
     // build prompt for user
@@ -128,6 +128,9 @@ void shell_execute(struct shell_command* command)
         strcmp(command->argv[0], "quit") == 0 ||
         strcmp(command->argv[0], "exit") == 0
     ) {
+        close(SH_STDIN);
+        close(SH_STDOUT);
+        close(SH_STDERR);
         exit(0);
     }
 

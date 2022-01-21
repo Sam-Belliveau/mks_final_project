@@ -12,13 +12,17 @@ int main()
 
     if(fork())
     {
-        while((read_size = read(from_server, buffer, BUFFER_SIZE)))
+        close(to_server);
+        while((read_size = read(from_server, buffer, BUFFER_SIZE)) > 0)
         { write(STDOUT_FILENO, buffer, read_size); }
+        close(from_server);
     }
 
     else
     {
-        while((read_size = read(STDIN_FILENO, buffer, BUFFER_SIZE)))
+        close(from_server);
+        while((read_size = read(STDIN_FILENO, buffer, BUFFER_SIZE)) > 0)
         { write(to_server, buffer, read_size); }
+        close(to_server);
     }
 }

@@ -1,5 +1,17 @@
 # mks_final_project | Shared Shell
 
+## How to use
+
+#### Start Server
+
+To start the server run `make run_server`
+
+#### Start a Client
+
+To start the client, run `make run_client`
+
+## Information
+
 The shared shell is a project that will merge two of the previous assignments:
 
     - The forking pipe based server

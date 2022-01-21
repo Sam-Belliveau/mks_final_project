@@ -9,8 +9,12 @@
 
 #ifndef NETWORKING_H
 #define NETWORKING_H
+
+#define PIPE_INPUT 1
+#define PIPE_OUTPUT 0
+
 #define ACK "HOLA"
-#define WKP "mario"
+#define WKP "multi_shell_pipe"
 
 #define server_printf(args...) fprintf(stderr, "[SERVER] " args)
 #define client_printf(args...) fprintf(stderr, "[CLIENT] " args)
