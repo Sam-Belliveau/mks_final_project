@@ -15,6 +15,7 @@
 
 #define ACK "HOLA"
 #define WKP "multi_shell_pipe"
+#define PANIC "THE_PROGRAM_IS_ENDING_AND_YOU_NEED_TO_CLOSE"
 
 #define server_printf(args...) fprintf(stderr, "[SERVER] " args)
 #define client_printf(args...) fprintf(stderr, "[CLIENT] " args)

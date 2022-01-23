@@ -3,112 +3,76 @@
 #include "./src/shell_command.h"
 
 #include <stdio.h>
+#include <signal.h>
 
 #define MAX_CLIENTS 256
+
+typedef union {
+    struct {
+        int from;
+        int to;
+    };
+
+    int pipe[2];
+} bi_file;
+
 
 // Handle SIGINT so that the shell can survive a ctrl+c
 static void signal_handler(int);
 
 int shell_loop(int* input);
+int handle_client(bi_file shell, int shell_chain, bi_file client, bi_file prev_client);
+void close_all_fds();
 
 int main(int argc, char** argv)
 {
     int read_size;
     char buffer[BUFFER_SIZE];
 
-    int to_client;
-    int from_client;
+    int client_id = 0;
 
-    int to_shell;
-    int from_shell;
+    bi_file client, prev_client;
+    bi_file shell, shell_chain;
 
-    int last_server = -1;
+    int t, last_server = -1;
 
-    from_shell = shell_loop(&to_shell);
+    shell.from = shell_loop(&shell.to);
+
+    client.from = -1;
+    client.to = -1;
 
     while(1)
     {
-        from_client = server_handshake( &to_client );
+        pipe(prev_client.pipe);
+        pipe(shell_chain.pipe);
 
-        int prev_chain[2], next_chain[2];
-        pipe(prev_chain);
-        pipe(next_chain);
+        t = last_server;
+        last_server = prev_client.to;
+        prev_client.to = t;
+
+        client.from = server_handshake( &client.to );
+        ++client_id;
 
         if(fork() == 0)
         {
-            close(next_chain[PIPE_OUTPUT]);
-            close(prev_chain[PIPE_INPUT]);
+            server_printf("Started Client Handle [ID: #%d]\n", client.from);
+            while(handle_client(shell, shell_chain.to, client, prev_client));
+            close_all_fds();
 
-            if(fork())
-            {
-                if(fork())
-                {
-                    close(from_shell);
-
-                    while((read_size = read(from_client, buffer, BUFFER_SIZE)))
-                    { 
-                        write(to_shell, buffer, read_size); 
-                        write(next_chain[PIPE_INPUT], buffer, read_size); 
-                        if(last_server > 0) write(last_server, buffer, read_size); 
-                    }
-
-                    close(from_client);
-                    close(next_chain[PIPE_INPUT]);
-                    close(last_server);
-
-                    write(to_shell, "quit", 5);
-                    exit(0);
-                }
-
-                else
-                {
-                    close(from_client);
-                    close(from_shell);
-                    close(next_chain[PIPE_INPUT]);
-
-                    while((read_size = read(prev_chain[PIPE_OUTPUT], buffer, BUFFER_SIZE)))
-                    { 
-                        write(to_client, buffer, read_size); 
-                        if(last_server > 0) write(last_server, buffer, read_size); 
-                    }
-
-                    close(to_client);
-                    close(last_server);
-                    close(prev_chain[PIPE_OUTPUT]);
-
-                    write(to_shell, "quit", 5);
-                    exit(0);
-                }
-            }
-
-            else
-            {
-                close(from_client);
-                close(last_server);
-                close(prev_chain[PIPE_OUTPUT]);
-
-                while((read_size = read(from_shell, buffer, BUFFER_SIZE)))
-                { 
-                    write(to_client, buffer, read_size); 
-                    write(next_chain[PIPE_INPUT], buffer, read_size); 
-                }
-
-                close(from_shell);
-                close(next_chain[PIPE_INPUT]);
-
-                write(to_shell, "quit", 5);
-                exit(0);
-            }
+            server_printf("Killing Client Handle [ID: #%d]\n", client.from);
+            kill(getppid(), SIGKILL);
+            exit(0);
         }
 
         else
         {
-            close(prev_chain[PIPE_OUTPUT]);
-            close(next_chain[PIPE_INPUT]);
-            close(from_client); from_client = -1;
-            close(to_client); to_client = -1;
-            from_shell = next_chain[PIPE_OUTPUT];
-            last_server = prev_chain[PIPE_INPUT];
+            close(shell.from);
+            close(shell_chain.to);
+            shell.from = shell_chain.from;
+            close(prev_client.from);
+            close(prev_client.to);
+            close(client.from);
+            close(client.to);
         }
     }
 }
@@ -159,4 +123,104 @@ int shell_loop(int* input)
         return shell_to_server[PIPE_OUTPUT];
     }
 
+}
+
+#define MAX_DESC(a, b) ((a) > (b) ? (a) : (b))
+
+int handle_client(bi_file shell, int shell_chain, bi_file client, bi_file prev_client)
+{
+    int read_size;
+    char buffer[BUFFER_SIZE] = {};
+
+    fd_set read_fds;
+
+    FD_ZERO(&read_fds);
+
+    FD_SET(shell.from, &read_fds);
+    FD_SET(client.from, &read_fds);
+    FD_SET(prev_client.from, &read_fds);
+
+    int max_desc = MAX_DESC(MAX_DESC(shell.from, client.from), prev_client.from);
+
+    int i = select(max_desc+1, &read_fds, NULL, NULL, NULL);
+
+    if(FD_ISSET(shell.from, &read_fds)) 
+    { 
+        read_size = read(shell.from, buffer, BUFFER_SIZE);
+
+        if(read_size) 
+        {
+            write(client.to, buffer, read_size); 
+            write(shell_chain, buffer, read_size); 
+            return 1;
+        }
+        else 
+        {
+            server_printf("Closed: shell.from [ID: #%d]\n", client.from);
+            goto close_fds;
+        }
+    }
+
+    if(FD_ISSET(client.from, &read_fds))
+    {
+        read_size = read(client.from, buffer, BUFFER_SIZE);
+
+        if(read_size) 
+        {
+            write(shell.to, buffer, read_size); 
+            write(shell_chain, buffer, read_size); 
+            write(prev_client.to, buffer, read_size); 
+            return 1;
+        }
+        else
+        {
+            server_printf("Closed: client.from [ID: #%d]\n", client.from);
+            goto close_fds;
+        }
+    }
+
+    if(FD_ISSET(prev_client.from, &read_fds))
+    {
+        read_size = read(prev_client.from, buffer, BUFFER_SIZE);
+        
+        if(read_size && (strncmp(buffer, PANIC, sizeof(PANIC)) != 0)) 
+        {
+            write(client.to, buffer, read_size); 
+            write(prev_client.to, buffer, read_size); 
+            return 1;
+        }
+        else 
+        {
+            server_printf("Closed: prev_client.from [ID: #%d]\n", client.from);
+            goto close_fds;
+        }
+    }
+
+    close_fds:
+
+    server_printf("\t- Closing: shell.to\n");
+    close(shell.to);
+
+    server_printf("\t- Closing: shell_chain\n");
+    close(shell_chain);
+
+    server_printf("\t- Closing: client\n");
+    close(client.from);
+    close(client.to);
+
+    server_printf("\t- PANICING: prev_client\n");
+    write(prev_client.to, PANIC, sizeof(PANIC)); 
+
+    server_printf("\t- Closing: prev_client\n");
+    close(prev_client.from);         
+    close(prev_client.to);        
+
+    server_printf("\t- Running Exit Process\n\nß");
+    return 0;
+}
+
+void close_all_fds()
+{
+    int i, fdlimit = (int)sysconf(_SC_OPEN_MAX);
+    for (i = STDERR_FILENO + 1; i < fdlimit; i++) close(i);   
 }

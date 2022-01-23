@@ -54,7 +54,7 @@ int server_handshake(int *to_client) {
     server_printf("Sent ACK\n");
 
     // Recieve ACK from client
-    if(read(from_client, ack, HANDSHAKE_BUFFER_SIZE) != HANDSHAKE_BUFFER_SIZE)
+    if(read(from_client, ack, HANDSHAKE_BUFFER_SIZE) != sizeof(ACK))
          server_printf("Error Recieving ACK, but I don't care [%s]\n", ack);
     else server_printf("Recieved ACK [%s]\n", ack); 
 
@@ -120,7 +120,7 @@ int client_handshake(int *to_server) {
     remove(private_pipe);
 
     // Wait for ACK from server
-    if(read(from_server, ack, HANDSHAKE_BUFFER_SIZE) != HANDSHAKE_BUFFER_SIZE)
+    if(read(from_server, ack, HANDSHAKE_BUFFER_SIZE) != sizeof(ACK))
          client_printf("Error Recieving ACK, but I don't care [%s]\n", ack);
     else client_printf("Recieved ACK [%s]\n", ack); 
 
