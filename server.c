@@ -16,10 +16,6 @@ typedef union {
     int pipe[2];
 } bi_file;
 
-
-// Handle SIGINT so that the shell can survive a ctrl+c
-static void signal_handler(int);
-
 int shell_loop(int* input);
 int handle_client(bi_file shell, int shell_chain, bi_file client, bi_file prev_client);
 void close_all_fds();
@@ -148,7 +144,7 @@ int handle_client(bi_file shell, int shell_chain, bi_file client, bi_file prev_c
     { 
         read_size = read(shell.from, buffer, BUFFER_SIZE);
 
-        if(read_size) 
+        if(read_size && (strncmp(buffer, PANIC, sizeof(PANIC)) != 0)) 
         {
             write(client.to, buffer, read_size); 
             write(shell_chain, buffer, read_size); 
@@ -165,7 +161,7 @@ int handle_client(bi_file shell, int shell_chain, bi_file client, bi_file prev_c
     {
         read_size = read(client.from, buffer, BUFFER_SIZE);
 
-        if(read_size) 
+        if(read_size && (strncmp(buffer, PANIC, sizeof(PANIC)) != 0)) 
         {
             write(shell.to, buffer, read_size); 
             write(shell_chain, buffer, read_size); 

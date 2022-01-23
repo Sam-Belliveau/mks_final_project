@@ -2,13 +2,28 @@
 
 int direct_read();
 
+// Handle SIGINT so that the shell can survive a ctrl+c
+static void signal_handler(int);
+
+int to_server;
+int from_server;
+
 int main() 
 {
-    int to_server;
-    int from_server;
-
+    signal(SIGINT, signal_handler);
     from_server = client_handshake( &to_server );
     while(direct_read(from_server, to_server, STDIN_FILENO, STDOUT_FILENO));
+    signal_handler(-1);
+}
+
+// Handle SIGINT by not closing if it is the parent process
+// and exiting if it is the child. The child usually overwrites this however.
+static void signal_handler(int signal) 
+{
+    write(to_server, PANIC, sizeof(PANIC)); 
+    close(to_server); to_server = -1;
+    close(from_server); from_server = -1;
+    exit(0);
 }
 
 int direct_read(int from_server, int to_server, int from_user, int to_user)
